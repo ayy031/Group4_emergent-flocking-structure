@@ -1,81 +1,80 @@
 import numpy as np
 
 
-def average_nearest_neighbour_distance(positions):
+def nearest_neighbor_distance(positions, box_size):
     """
-    Compute the average nearest-neighbour distance between agents.
+    Compute average nearest-neighbour distance under periodic boundary conditions.
 
     Parameters
     ----------
     positions : np.ndarray, shape (N, 2)
-        Positions of all agents in 2D space.
+        Particle positions.
+    box_size : float
+        Size of the simulation box (assumed square).
 
     Returns
     -------
     float
-        Average distance to the nearest neighbour.
+        Mean nearest-neighbour distance.
     """
     N = positions.shape[0]
-    nearest_distances = []
+    distances = []
 
     for i in range(N):
-        # Compute distances from agent i to all other agents
-        diff = positions[i] - positions
-        distances = np.sqrt((diff ** 2).sum(axis=1))
+        diff = positions - positions[i]
+        diff -= box_size * np.round(diff / box_size)  # periodic BC
+        dists = np.linalg.norm(diff, axis=1)
+        dists = dists[dists > 0]  # remove self-distance
+        distances.append(np.min(dists))
 
-        # Ignore distance to itself
-        distances[i] = np.inf
-
-        # Store nearest neighbour distance
-        nearest_distances.append(distances.min())
-
-    return np.mean(nearest_distances)
+    return np.mean(distances)
 
 
-def largest_cluster_fraction(positions, threshold):
+def largest_cluster_fraction(positions, eps, box_size):
     """
-    Compute the fraction of agents belonging to the largest cluster.
-
-    Agents are considered connected if they are within a given distance threshold.
+    Compute fraction of particles in the largest cluster.
+    Simple distance-based clustering.
 
     Parameters
     ----------
-    positions : np.ndarray, shape (N, 2)
-        Positions of all agents in 2D space.
-    threshold : float
-        Distance threshold for cluster connectivity.
+    positions : np.ndarray
+    eps : float
+        Distance threshold to define neighbours.
+    box_size : float
 
     Returns
     -------
     float
-        Size of the largest cluster divided by total number of agents.
+        Size of largest cluster divided by N.
     """
     N = positions.shape[0]
     visited = np.zeros(N, dtype=bool)
-    largest_cluster_size = 0
+    clusters = []
 
     for i in range(N):
         if visited[i]:
             continue
 
-        # Start a new cluster
         stack = [i]
-        visited[i] = True
-        cluster_size = 1
+        cluster = []
 
         while stack:
-            current = stack.pop()
-            diff = positions[current] - positions
-            distances = np.sqrt((diff ** 2).sum(axis=1))
+            j = stack.pop()
+            if visited[j]:
+                continue
+            visited[j] = True
+            cluster.append(j)
 
-            # Find neighbours within threshold
-            neighbours = np.where((distances < threshold) & (~visited))[0]
+            diff = positions - positions[j]
+            diff -= box_size * np.round(diff / box_size)
+            dists = np.linalg.norm(diff, axis=1)
 
-            for n in neighbours:
-                visited[n] = True
-                stack.append(n)
-                cluster_size += 1
+            neighbors = np.where(dists < eps)[0]
+            for n in neighbors:
+                if not visited[n]:
+                    stack.append(n)
 
-        largest_cluster_size = max(largest_cluster_size, cluster_size)
+        clusters.append(cluster)
 
-    return largest_cluster_size / N
+    largest = max(len(c) for c in clusters)
+    return largest / N
