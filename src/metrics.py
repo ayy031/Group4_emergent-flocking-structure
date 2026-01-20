@@ -33,8 +33,11 @@ def nearest_neighbor_distance(positions, box_size):
 def largest_cluster_fraction(positions, eps, box_size):
     """
     Compute fraction of particles in the largest cluster.
-    Simple distance-based clustering.
-
+    
+    Two particles are considered connected if their distance under
+    periodic boundary conditions is smaller than eps.
+    A cluster is defined as a connected component.
+   
     Parameters
     ----------
     positions : np.ndarray
@@ -81,6 +84,32 @@ def largest_cluster_fraction(positions, eps, box_size):
 
 
 def density_variance_grid(positions: np.ndarray, box_size: float, bins: int = 20, normalized: bool = True) -> float:
+    """
+    Measure how uneven the spatial density is using a 2D grid.
+
+    We bin positions into a bins x bins histogram H.
+    If normalized=True, we return Var(H) / Mean(H)^2 so the value is less sensitive
+    to the absolute scale (mainly reflects clustering/inhomogeneity).
+
+    Parameters
+    ----------
+    positions : np.ndarray, shape (N, 2)
+        Particle positions.
+    box_size : float
+        Size of the simulation box (square).
+    bins : int
+        Number of bins per axis for the histogram grid.
+    normalized : bool
+        Whether to return a normalized variance.
+
+    Returns
+    -------
+    float
+        Density variance score (higher usually means more clustering).
+    """
+    if positions.size == 0:
+        return float("nan")
+    
     H, _, _ = np.histogram2d(
         positions[:, 0], positions[:, 1],
         bins=bins,

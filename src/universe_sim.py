@@ -3,12 +3,35 @@ from typing import Optional
 
 
 def initialize_particles(N: int, box_size: float, rng: np.random.Generator) -> np.ndarray:
-    """Uniform random initial positions in a 2D periodic box."""
+    """
+    Initialize N particles with uniform random positions in [0, box_size) x [0, box_size).
+
+    Parameters
+    ----------
+    N : int
+        Number of particles.
+    box_size : float
+        Side length of the square box.
+    rng : np.random.Generator
+        Random number generator.
+
+    Returns
+    -------
+    np.ndarray, shape (N, 2)
+        Initial positions.
+    """
     return rng.random((N, 2)) * box_size
 
 
 def _pairwise_diffs_pbc(positions: np.ndarray, box_size: float) -> tuple[np.ndarray, np.ndarray]:
-    """Compute pairwise displacements and distances under minimum-image PBC."""
+    """
+    Compute pairwise displacements and distances under minimum-image PBC.
+
+    Note
+    ----
+    diffs[i, j] = x_i - x_j (after applying minimum-image convention).
+    So the vector from i to j is -diffs[i, j].
+    """
     diffs = positions[:, None, :] - positions[None, :, :]
     diffs -= box_size * np.round(diffs / box_size)
     dists = np.linalg.norm(diffs, axis=2)
@@ -35,6 +58,12 @@ def step(
     - F_att: local attraction toward neighbors within interaction_range
              computed correctly under PBC via minimum-image displacements.
     - F_rep: short-range repulsion within repulsion_radius.
+        
+    Notes
+    -----
+    - Overdamped dynamics: we directly update positions (no explicit velocities).
+    - Repulsion prevents particles from collapsing into a single point.
+    - Periodic boundaries are enforced by taking positions modulo box_size.
     """
     diffs, dists = _pairwise_diffs_pbc(positions, box_size)
 
@@ -51,6 +80,8 @@ def step(
     F_att = mean_to_neighbors
 
     # --- Repulsion: push away from close neighbors ---
+    # Repulsion direction points from j to i (diffs = x_i - x_j),
+    # and rep_weight makes the force stronger when closer than repulsion_radius.
     rep_mask = (dists > 0) & (dists < repulsion_radius)
     rep_dir = diffs / (dists[:, :, None] + softening)
     rep_weight = (repulsion_radius - dists)
@@ -76,7 +107,15 @@ def run_simulation(
     seed: Optional[int] = None,
     save_every: int = 1,
 ) -> np.ndarray:
-    """Run the simulation and return an array of saved configurations."""
+    """
+    Run the simulation and return saved configurations.
+
+    Returns
+    -------
+    np.ndarray, shape (T, N, 2)
+        Saved trajectory of positions.
+        T = steps // save_every (approximately).
+    """
     if save_every < 1:
         raise ValueError("save_every must be >= 1")
 
