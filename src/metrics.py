@@ -110,10 +110,10 @@ def density_variance_grid(positions: np.ndarray, box_size: float, bins: int = 20
     if positions.size == 0:
         return float("nan")
     
-    H, _, _ = np.histogram2d(
-        positions[:, 0], positions[:, 1],
-        bins=bins,
-        range=[[0, box_size], [0, box_size]],
+    H, _, _ = np.histogramdd(
+        positions,
+        bins=[bins] * positions.shape[1],
+        range=[[0, box_size]] * positions.shape[1],
     )
     mean = np.mean(H)
     var = np.var(H)
