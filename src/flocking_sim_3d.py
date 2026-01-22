@@ -5,11 +5,19 @@ def run_simulation(
     steps=400,
     box_size=1.0,
     align=1.0,
+    cohesion=0.5,               
     noise=0.05,
     R=0.15,
     speed=0.03,
     repulsion_radius=0.05,
     repulsion_strength=1.0,
+    
+    predator_strength=5.0,         
+    #defaults to 3*R
+    predator_radius=None,
+    #defaults to 1 * speed 
+    predator_speed=None,           
+    
     dt=1.0,
     seed=None,
     save_every=1,
@@ -26,6 +34,16 @@ def run_simulation(
     # random velocity directions in 3D
     vel = rng.normal(size=(N, 3))
     vel = vel / (np.linalg.norm(vel, axis=1, keepdims=True) + 1e-12)
+
+    # predator setup 
+    if predator_radius is None:
+        predator_radius = 3.0 * R
+    if predator_speed is None:
+        predator_speed = 1.0 * speed
+
+    pred_pos = rng.random(3) * box_size
+    pred_vel = rng.normal(size=3)
+    pred_vel = pred_vel / (np.linalg.norm(pred_vel) + 1e-12)
 
     history = []
 
@@ -54,16 +72,49 @@ def run_simulation(
         rep_weight = (repulsion_radius - dist) / repulsion_radius
         F_rep = np.sum(rep_dir * rep_weight[:, :, None] * rep_mask[:, :, None], axis=1)
 
+        # cohesion 
+        sum_to_neighbors = np.sum((-diff) * neigh[:, :, None], axis=1)
+        F_coh = sum_to_neighbors / (count[:, None] + 1e-9)
+        F_coh[count == 0] = 0.0
+
+        # predator avoidance 
+        F_pred = np.zeros_like(pos)
+        if predator_strength != 0.0:
+            dp = pos - pred_pos[None, :]
+            dp -= box_size * np.round(dp / box_size)
+            d = np.linalg.norm(dp, axis=1)
+
+            mask = (d > 0) & (d < predator_radius)
+            F_pred[mask] = dp[mask] / (d[mask, None]**2 + 1e-12)
+
         # update velocity
-        vel = vel + dt * (align * steer + repulsion_strength * F_rep)
+        vel = vel + dt * (
+            align * steer
+            + cohesion * F_coh
+            + repulsion_strength * F_rep
+            + predator_strength * F_pred
+        )
         vel = vel + noise * rng.normal(size=vel.shape)
 
         # normalize to constant speed
-        vel = vel / (np.linalg.norm(vel, axis=1, keepdims=True) + 1e-12)
+        vnorm = np.linalg.norm(vel, axis=1, keepdims=True)
+        vel = vel / (vnorm + 1e-12)
         vel = speed * vel
 
         # move and wrap
         pos = (pos + dt * vel) % box_size
+
+        # predator motion 
+        if predator_strength != 0.0:
+            com = pos.mean(axis=0)
+            to_com = com - pred_pos
+            to_com -= box_size * np.round(to_com / box_size)
+            to_com = to_com / (np.linalg.norm(to_com) + 1e-12)
+
+            pred_vel = pred_vel + 0.5 * to_com + 0.05 * rng.normal(size=3)
+            pnorm = np.linalg.norm(pred_vel)
+            pred_vel = pred_vel / (pnorm + 1e-12)
+            pred_pos = (pred_pos + dt * predator_speed * pred_vel) % box_size
 
         if (t + 1) % save_every == 0:
             history.append(pos.copy())
