@@ -1,3 +1,16 @@
 
 __pycache__/
 *.pyc
+
+figures/
+results/
+*.gif
+*.mp4
+.ipynb_checkpoints/
+
+figures/
+results/
+*.gif
+*.mp4
+*.mov
+.ipynb_checkpoints/
