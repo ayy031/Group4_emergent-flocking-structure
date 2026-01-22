@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def nearest_neighbor_distance(positions, box_size):
     """
     Compute average nearest-neighbour distance under periodic boundary conditions.
@@ -214,5 +213,37 @@ def polarization_time_avg(positions, box_size=1.0, K=50):
 
     return float(np.mean(phis))
 
-    
+def global_density(positions, box_size):
+    N = positions.shape[1]
+    area = box_size * box_size
+    return N / area
+
+
+def local_density(positions, r, box_size, K=50):
+    """
+    This measures how crowded the flock is around each agent, then averages.
+    """
+    T, N, _ = positions.shape
+    densities = []
+
+    for t in range(T-K+1, T):
+        pos = positions[t]
+
+        # pairwise displacement
+        diff = pos[:, None, :] - pos[None, :, :]
+        diff -= box_size * np.round(diff / box_size)
+        dist = np.linalg.norm(diff, axis=2)
+
+        # count neighbours within r (exclude self)
+        neigh = (dist > 0) & (dist < r)
+        counts = np.sum(neigh, axis=1)
+
+        # density = neighbours / area of circle
+        rho = counts / (np.pi * r * r)
+
+        densities.append(np.mean(rho))
+
+    return float(np.mean(densities))
+
+
 
