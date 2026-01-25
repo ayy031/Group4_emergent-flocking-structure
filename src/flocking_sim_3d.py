@@ -107,7 +107,7 @@ def run_simulation(
         pos = (pos + dt * vel) % box_size
 
         # predator motion 
-        if predator_strength != 0.0:
+        if use_predator:
             com = pos.mean(axis=0)
             to_com = com - pred_pos
             to_com -= box_size * np.round(to_com / box_size)
