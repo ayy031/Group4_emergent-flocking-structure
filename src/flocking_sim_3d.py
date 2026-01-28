@@ -69,15 +69,26 @@ def run_simulation(
         steer[count == 0] = 0.0
 
         # repulsion
-        rep_mask = (dist > 0) & (dist < repulsion_radius)
-        rep_dir = diff / (dist[:, :, None] + softening)
-        rep_weight = (repulsion_radius - dist) / repulsion_radius
-        F_rep = np.sum(rep_dir * rep_weight[:, :, None] * rep_mask[:, :, None], axis=1)
+        if repulsion_strength != 0.0 and repulsion_radius > 0.0:
+            rep_mask = (dist > 0) & (dist < repulsion_radius)
+            # compute only where needed to avoid nan*0 issues
+            rep_dir = np.zeros_like(diff)
+            rep_dir[rep_mask] = diff[rep_mask] / (dist[rep_mask, None] + softening)
+
+            rep_weight = np.zeros_like(dist)
+            rep_weight[rep_mask] = (repulsion_radius - dist[rep_mask]) / repulsion_radius
+
+            F_rep = np.sum(rep_dir * rep_weight[:, :, None], axis=1)
+        else:
+            F_rep = np.zeros_like(pos)
 
         # cohesion 
-        sum_to_neighbors = np.sum((-diff) * neigh[:, :, None], axis=1)
-        F_coh = sum_to_neighbors / (count[:, None] + 1e-9)
-        F_coh[count == 0] = 0.0
+        if cohesion != 0.0:
+            sum_to_neighbors = np.sum((-diff) * neigh[:, :, None], axis=1)
+            F_coh = sum_to_neighbors / (count[:, None] + 1e-9)
+            F_coh[count == 0] = 0.0
+        else:
+            F_coh = np.zeros_like(pos)
 
         # predator avoidance 
         F_pred = np.zeros_like(pos)
