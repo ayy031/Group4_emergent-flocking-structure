@@ -14,3 +14,4 @@ results/
 *.mp4
 *.mov
 .ipynb_checkpoints/
+notebooks/sweep3d_align_cohesion_noise.npz

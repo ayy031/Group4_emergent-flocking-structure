@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import SimConfig, MetricsConfig
-from src.universe_sim import run_simulation
+from src.baseline_clustering_2d import run_simulation
 from src.metrics import (
     nearest_neighbor_distance,
     largest_cluster_fraction,

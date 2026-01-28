@@ -84,38 +84,40 @@ def largest_cluster_fraction(positions, eps, box_size):
 
 def density_variance_grid(positions: np.ndarray, box_size: float, bins: int = 20, normalized: bool = True) -> float:
     """
-    Measure how uneven the spatial density is using a 2D grid.
-
-    We bin positions into a bins x bins histogram H.
-    If normalized=True, we return Var(H) / Mean(H)^2 so the value is less sensitive
-    to the absolute scale (mainly reflects clustering/inhomogeneity).
+    Measure spatial density inhomogeneity using a grid.
+    Works for both 2D and 3D positions.
 
     Parameters
     ----------
-    positions : np.ndarray, shape (N, 2)
-        Particle positions.
+    positions : np.ndarray, shape (N, D)
+        Particle positions (D = 2 or 3).
     box_size : float
-        Size of the simulation box (square).
+        Size of the simulation box.
     bins : int
-        Number of bins per axis for the histogram grid.
+        Number of bins per dimension.
     normalized : bool
-        Whether to return a normalized variance.
+        Whether to normalize variance by mean^2.
 
     Returns
     -------
     float
-        Density variance score (higher usually means more clustering).
+        Density variance (higher = more clustered).
     """
     if positions.size == 0:
         return float("nan")
-    
-    H, _, _ = np.histogram2d(
-        positions[:, 0], positions[:, 1],
-        bins=bins,
-        range=[[0, box_size], [0, box_size]],
+
+    dim = positions.shape[1]  # 2 or 3
+    ranges = [[0, box_size]] * dim
+
+    H, _ = np.histogramdd(
+        positions,
+        bins=[bins] * dim,
+        range=ranges
     )
+
     mean = np.mean(H)
     var = np.var(H)
+
     if normalized:
         return var / (mean**2 + 1e-12)
     return float(var)
@@ -214,10 +216,10 @@ def polarization_time_avg(positions, box_size=1.0, K=50):
     return float(np.mean(phis))
 
 def global_density(positions, box_size):
-    """Measures overall density"""
-    N = positions.shape[1]
-    area = box_size * box_size
-    return N / area
+    N = positions.shape[0]
+    d = positions.shape[1]
+    volume = box_size ** d
+    return N / volume
 
 
 def local_density(positions, r, box_size, K=50):
@@ -240,8 +242,15 @@ def local_density(positions, r, box_size, K=50):
         counts = np.sum(neigh, axis=1)
 
         # density = neighbours / area of circle
-        rho = counts / (np.pi * r * r)
-
+        d = pos.shape[1]
+        if d == 2:
+            denom = np.pi * r * r
+        elif d == 3:
+         denom = (4.0/3.0) * np.pi * r**3
+        else:
+            denom = r**d
+        rho = counts / denom
+        
         densities.append(np.mean(rho))
 
     return float(np.mean(densities))
