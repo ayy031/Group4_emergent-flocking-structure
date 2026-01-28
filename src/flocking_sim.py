@@ -27,7 +27,7 @@ def run_simulation(
     history = []
 
     for t in range(steps):
-        # pairwise displacement (this follows same structure as universe_sim.py)
+        # pairwise displacement (this follows same structure as baseline_clustering_2d.py)
         diff = pos[:, None, :] - pos[None, :, :]
         diff -= box_size * np.round(diff / box_size)
         dist = np.linalg.norm(diff, axis=2)
