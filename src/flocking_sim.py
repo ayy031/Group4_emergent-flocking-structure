@@ -12,48 +12,49 @@ def run_simulation(
     seed=None,
     save_every=1,
 ):
+    """
+    Basic 2D flocking simulation (Vicsek-style model).
+    
+    Particles move at constant speed but adjust direction based on neighbors.
+    The key is the alignment rule: each particle turns toward the average
+    direction of nearby particles, plus some noise.
+    """
     if save_every < 1:
         raise ValueError("save_every must be >= 1")
 
     rng = np.random.default_rng(seed)
-
-    # positions uniform in box
     pos = rng.random((N, 2)) * box_size
-
-    # random velocity directions
+    
+    # Start with random directions
     ang = rng.uniform(0.0, 2.0 * np.pi, size=N)
-    vel = np.column_stack((np.cos(ang), np.sin(ang)))  # unit vectors
+    vel = np.column_stack((np.cos(ang), np.sin(ang)))
 
     history = []
 
     for t in range(steps):
-        # pairwise displacement (this follows same structure as baseline_clustering_2d.py)
+        # Compute all pairwise distances with periodic boundaries
+        # (wrap-around so particles on opposite edges can interact)
         diff = pos[:, None, :] - pos[None, :, :]
         diff -= box_size * np.round(diff / box_size)
         dist = np.linalg.norm(diff, axis=2)
 
-        # neighbors within R
+        # Find who's within interaction range
         neigh = (dist > 0) & (dist < R)
-
-        # average neighbor velocity
         count = np.sum(neigh, axis=1)
+        
+        # Average velocity of neighbors
         v_sum = np.sum(vel[None, :, :] * neigh[:, :, None], axis=1)
         v_avg = v_sum / (count[:, None] + 1e-9)
 
-        # steer toward average
-        #steer towards 0 if no neighbors
+        # Steering: turn toward average (if we have neighbors)
         steer = v_avg - vel
         steer[count == 0] = 0.0
 
-        # update velocity and noise with new values
-        vel = vel + dt * (align * steer)
-        vel = vel + noise * rng.normal(size=vel.shape)
+        # Update: alignment + noise, then normalize to constant speed
+        vel = vel + dt * align * steer + noise * rng.normal(size=vel.shape)
+        vel = vel / (np.linalg.norm(vel, axis=1, keepdims=True) + 1e-12) * speed
 
-        # normalize to the constant speed
-        vel = vel / (np.linalg.norm(vel, axis=1, keepdims=True) + 1e-12)
-        vel = speed * vel
-
-        # move and wrap
+        # Move and wrap around boundaries
         pos = (pos + dt * vel) % box_size
 
         if (t + 1) % save_every == 0:

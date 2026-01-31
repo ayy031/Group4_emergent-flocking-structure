@@ -1,17 +1,15 @@
 # src/experiments.py
 from __future__ import annotations
 
-# Allow running this file directly (python src/experiments.py) by ensuring
-# the project root is on sys.path so `import src.*` works.
 import sys
 from pathlib import Path
 
+# Make sure we can import from src/ when running this file directly
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from dataclasses import asdict
-from typing import Any, Dict, Iterable, List, Optional
 import time
 
 import numpy as np
@@ -27,11 +25,8 @@ from src.metrics import (
 )
 
 
-def _ensure_history(sim_out: Any) -> np.ndarray:
-    """
-    Normalize run_simulation output to a history array of shape (T, N, 2).
-    If run_simulation returns (history, ...), we take the first element.
-    """
+def _ensure_history(sim_out):
+    """Convert simulation output to standard array format."""
     if isinstance(sim_out, (tuple, list)):
         sim_out = sim_out[0]
     history = np.asarray(sim_out)
@@ -40,15 +35,15 @@ def _ensure_history(sim_out: Any) -> np.ndarray:
     return history
 
 
-def frames_after_burn(history: np.ndarray, burn_frac: float) -> np.ndarray:
+def frames_after_burn(history, burn_frac):
+    """Discard initial transient - only keep frames after burn-in."""
     T = history.shape[0]
     start = int(np.floor(T * burn_frac))
     return history[start:]
 
 
-def metrics_on_positions(pos: np.ndarray, sim: SimConfig, met: MetricsConfig) -> Dict[str, float]:
-    """Compute metrics on ONE frame (positions pos, shape (N,2))."""
-    # Call metric functions using a positional first argument for maximum compatibility.
+def metrics_on_positions(pos, sim, met):
+    """Compute all metrics for a single frame."""
     return {
         "nn": float(nearest_neighbor_distance(pos, box_size=sim.box_size)),
         "densvar": float(density_variance_grid(pos, box_size=sim.box_size, bins=met.bins)),
@@ -57,22 +52,18 @@ def metrics_on_positions(pos: np.ndarray, sim: SimConfig, met: MetricsConfig) ->
     }
 
 
-def metrics_timeavg(history: np.ndarray, sim: SimConfig, met: MetricsConfig) -> Dict[str, float]:
+def metrics_timeavg(history, sim, met):
     """
-    Burn-in + time-average metrics; includes within-run LCF fluctuation.
-    Returns:
-      nn_mean, densvar_mean, lcf_mean, nclusters_mean, lcf_time_std
+    Main metric computation: burn-in, then time-average.
+    
+    We throw out the first 60% of frames (system settling), then average
+    metrics over remaining frames. Also track LCF fluctuations.
     """
     frames = frames_after_burn(history, met.burn_frac)
     if frames.shape[0] == 0:
-        raise ValueError(
-            "No frames left after burn-in. Reduce burn_frac or increase steps/save_every."
-        )
+        raise ValueError("No frames after burn-in. Reduce burn_frac or increase steps.")
 
-    nn_list: List[float] = []
-    dens_list: List[float] = []
-    lcf_list: List[float] = []
-    ncl_list: List[float] = []
+    nn_list, dens_list, lcf_list, ncl_list = [], [], [], []
 
     for pos in frames:
         m = metrics_on_positions(pos, sim, met)
@@ -86,19 +77,14 @@ def metrics_timeavg(history: np.ndarray, sim: SimConfig, met: MetricsConfig) -> 
         "densvar_mean": float(np.mean(dens_list)),
         "lcf_mean": float(np.mean(lcf_list)),
         "nclusters_mean": float(np.mean(ncl_list)),
-        "lcf_time_std": float(np.std(lcf_list)),
+        "lcf_time_std": float(np.std(lcf_list)),  # within-run fluctuation
     }
 
 
-def run_one(
-    sim_base: SimConfig,
-    met: MetricsConfig,
-    seed: int,
-    overrides: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+def run_one(sim_base, met, seed, overrides=None):
     """
-    Run one simulation and return a single row dict:
-      seed + overrides + time-avg metrics + runtime_sec
+    Single simulation run with metrics.
+    Takes base config, applies overrides, runs sim, returns results.
     """
     overrides = overrides or {}
 
@@ -124,7 +110,7 @@ def run_one(
     metrics = metrics_timeavg(history, sim, met)
     dt_run = time.time() - t0
 
-    row: Dict[str, Any] = {
+    row = {
         "seed": int(seed),
         **{k: float(v) for k, v in overrides.items()},
         **metrics,
@@ -133,43 +119,33 @@ def run_one(
     return row
 
 
-def run_sweep(
-    sim_base: SimConfig,
-    met: MetricsConfig,
-    sweep_name: str,
-    sweep_values: Iterable[float],
-    seeds: Iterable[int],
-) -> pd.DataFrame:
+def run_sweep(sim_base, met, sweep_name, sweep_values, seeds):
     """
-    Sweep one parameter over sweep_values; repeat over seeds.
-    Returns a raw dataframe with one row per (value, seed).
+    Parameter sweep: vary one parameter, repeat across seeds.
+    Returns raw dataframe (one row per run).
     """
-    rows: List[Dict[str, Any]] = []
+    rows = []
     for v in sweep_values:
         for s in seeds:
-            rows.append(
-                run_one(sim_base, met, seed=int(s), overrides={sweep_name: float(v)})
-            )
+            rows.append(run_one(sim_base, met, seed=int(s), overrides={sweep_name: float(v)}))
     return pd.DataFrame(rows)
 
 
-def summarize(df_raw: pd.DataFrame, by: str) -> pd.DataFrame:
+def summarize(df_raw, by):
     """
-    Group by `by` and compute mean/std across seeds for all metric columns.
-    Output columns look like: lcf_mean_mean, lcf_mean_std, ...
+    Aggregate across seeds: compute mean and std for each parameter value.
     """
     metric_cols = [c for c in df_raw.columns if c not in ["seed", by]]
     g = df_raw.groupby(by)[metric_cols].agg(["mean", "std"]).reset_index()
-    g.columns = [by] + [f"{a}_{b}" for a, b in g.columns[1:]]  # flatten MultiIndex
+    g.columns = [by] + [f"{a}_{b}" for a, b in g.columns[1:]]
     return g
 
 
 if __name__ == "__main__":
-    print("[experiments] __main__ starting...", flush=True)
+    print("[experiments] smoke test starting...")
 
-    # Fast smoke test (should finish quickly)
     sim = SimConfig(N=80, steps=400, save_every=10)
     met = MetricsConfig()
 
     row = run_one(sim, met, seed=0, overrides={"attraction": sim.attraction})
-    print("[experiments] smoke test OK. Keys:", sorted(row.keys()), flush=True)
+    print("[experiments] smoke test OK. Keys:", sorted(row.keys()))

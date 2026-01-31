@@ -2,71 +2,50 @@ import numpy as np
 
 def nearest_neighbor_distance(positions, box_size):
     """
-    Compute average nearest-neighbour distance under periodic boundary conditions.
-
-    Parameters
-    ----------
-    positions : np.ndarray, shape (N, 2)
-        Particle positions.
-    box_size : float
-        Size of the simulation box (assumed square).
-
-    Returns
-    -------
-    float
-        Mean nearest-neighbour distance.
+    Average distance to nearest neighbor (with periodic boundaries).
+    Lower values = more clustering.
     """
     N = positions.shape[0]
-    distances = []
+    min_dists = []
 
     for i in range(N):
         diff = positions - positions[i]
-        diff -= box_size * np.round(diff / box_size)  # periodic BC
+        diff -= box_size * np.round(diff / box_size)
         dists = np.linalg.norm(diff, axis=1)
-        dists = dists[dists > 0]  # remove self-distance
-        distances.append(np.min(dists))
+        dists = dists[dists > 0]  # exclude self
+        min_dists.append(np.min(dists))
 
-    return np.mean(distances)
+    return np.mean(min_dists)
 
 
 def largest_cluster_fraction(positions, eps, box_size):
     """
-    Compute fraction of particles in the largest cluster.
+    Fraction of particles in the biggest cluster.
     
-    Two particles are considered connected if their distance under
-    periodic boundary conditions is smaller than eps.
-    A cluster is defined as a connected component.
-   
-    Parameters
-    ----------
-    positions : np.ndarray
-    eps : float
-        Distance threshold to define neighbours.
-    box_size : float
-
-    Returns
-    -------
-    float
-        Size of largest cluster divided by N.
+    We use distance-based connectivity: two particles are in the same
+    cluster if they're closer than eps (accounting for periodic boundaries).
+    Then we find connected components using a simple DFS.
     """
     N = positions.shape[0]
     visited = np.zeros(N, dtype=bool)
-    clusters = []
+    max_size = 0
 
     for i in range(N):
         if visited[i]:
             continue
 
+        # DFS to find this cluster
         stack = [i]
-        cluster = []
+        size = 0
 
         while stack:
             j = stack.pop()
             if visited[j]:
                 continue
             visited[j] = True
-            cluster.append(j)
+            size += 1
 
+            # Find neighbors of j
             diff = positions - positions[j]
             diff -= box_size * np.round(diff / box_size)
             dists = np.linalg.norm(diff, axis=1)
@@ -76,78 +55,40 @@ def largest_cluster_fraction(positions, eps, box_size):
                 if not visited[n]:
                     stack.append(n)
 
-        clusters.append(cluster)
+        max_size = max(max_size, size)
 
-    largest = max(len(c) for c in clusters)
-    return largest / N
+    return max_size / N
 
 
-def density_variance_grid(positions: np.ndarray, box_size: float, bins: int = 20, normalized: bool = True) -> float:
+def density_variance_grid(positions, box_size, bins=20, normalized=True):
     """
-    Measure spatial density inhomogeneity using a grid.
-    Works for both 2D and 3D positions.
-
-    Parameters
-    ----------
-    positions : np.ndarray, shape (N, D)
-        Particle positions (D = 2 or 3).
-    box_size : float
-        Size of the simulation box.
-    bins : int
-        Number of bins per dimension.
-    normalized : bool
-        Whether to normalize variance by mean^2.
-
-    Returns
-    -------
-    float
-        Density variance (higher = more clustered).
+    How non-uniform is the spatial distribution?
+    
+    We divide space into a grid and count particles per cell. High variance
+    means clustering (some cells have many, others have few). Works in 2D or 3D.
     """
     if positions.size == 0:
         return float("nan")
 
-    dim = positions.shape[1]  # 2 or 3
-    ranges = [[0, box_size]] * dim
-
+    dim = positions.shape[1]
     H, _ = np.histogramdd(
         positions,
         bins=[bins] * dim,
-        range=ranges
+        range=[[0, box_size]] * dim
     )
 
-    mean = np.mean(H)
     var = np.var(H)
-
     if normalized:
+        mean = np.mean(H)
         return var / (mean**2 + 1e-12)
     return float(var)
 
 
-def number_of_clusters(positions: np.ndarray, eps: float, box_size: float, min_size: int = 1) -> int:
-
-    """
-    Count number of clusters under a simple distance-threshold connectivity rule (PBC).
-
-    Two particles are connected if their distance (under periodic BC) is < eps.
-    A cluster is a connected component in this graph.
-
-    Parameters
-    ----------
-    positions : np.ndarray, shape (N, 2)
-    eps : float
-        Neighbour threshold distance.
-    box_size : float
-    min_size : int
-        Only count clusters with size >= min_size (useful to ignore singletons).
-
-    Returns
-    -------
-    int
-        Number of clusters.
-    """
+def number_of_clusters(positions, eps, box_size, min_size=1):
+    """Count clusters (ignoring singletons if min_size > 1)."""
     N = positions.shape[0]
     visited = np.zeros(N, dtype=bool)
-    n_clusters = 0
+    count = 0
 
     for i in range(N):
         if visited[i]:
@@ -173,49 +114,36 @@ def number_of_clusters(positions: np.ndarray, eps: float, box_size: float, min_s
                     stack.append(n)
 
         if cluster_size >= min_size:
-            n_clusters += 1
+            count += 1
 
-    return n_clusters
+    return count
 
 
 def polarization_time_avg(positions, box_size=1.0, K=50):
     """
-    Polarization measures how aligned the agents are in their direction of motion.
-
-    - Polarization ≈ 0 → motion is random, no collective order
-    - Polarization ≈ 1 → motion is highly aligned, strong flocking
+    Standard order parameter for flocking: how aligned are the velocities?
     
-    Polarization is the standard order parameter for Vicsek-type flocking models.
-
-    Mathematically, polarization is the average of all unit vectors.
-
-    Parameters
-    ----------
-    positions : np.ndarray, shape (N, 2)
-    box_size : float
-    K: int
-        Number of timesteps to average order parameter.
-
-    Returns
-    -------
-    float
-        Level of order between 0 and 1
-
+    We estimate velocity from consecutive position differences, then compute
+    the norm of the average velocity vector. Close to 1 = aligned, close to 0 = random.
     """
-    T = positions.shape[0] # number of steps
+    T = positions.shape[0]
     phis = []
+    
     for t in range(T-K+1, T):
-        v = positions[t] - positions[t-1] # estimate velocity by subtracting previous positions
-        v -= box_size * np.round(v / box_size)  # periodic boundary correction
-
-        vhat = v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-12) # normalize velocity
-
-        phi = np.linalg.norm(np.sum(vhat, axis=0)) / vhat.shape[0] # compute polarization
+        # Estimate velocity from position change
+        v = positions[t] - positions[t-1]
+        v -= box_size * np.round(v / box_size)
+        vhat = v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-12)
+        
+        # Polarization = |<v>| / N
+        phi = np.linalg.norm(np.sum(vhat, axis=0)) / vhat.shape[0]
         phis.append(phi)
 
     return float(np.mean(phis))
 
+
 def global_density(positions, box_size):
+    """Just N / volume. Trivial but sometimes useful."""
     N = positions.shape[0]
     d = positions.shape[1]
     volume = box_size ** d
@@ -224,33 +152,31 @@ def global_density(positions, box_size):
 
 def local_density(positions, r, box_size, K=50):
     """
-    This measures how crowded the flock is around each agent, then averages.
+    Average local crowding around each particle.
+    For each particle, count neighbors within radius r, normalize by the
+    volume of that ball, then average over particles and time.
     """
     T, N, _ = positions.shape
     densities = []
 
     for t in range(T-K+1, T):
         pos = positions[t]
-
-        # pairwise displacement
         diff = pos[:, None, :] - pos[None, :, :]
         diff -= box_size * np.round(diff / box_size)
         dist = np.linalg.norm(diff, axis=2)
 
-        # count neighbours within r (exclude self)
         neigh = (dist > 0) & (dist < r)
         counts = np.sum(neigh, axis=1)
 
-        # density = neighbours / area of circle
         d = pos.shape[1]
         if d == 2:
-            denom = np.pi * r * r
+            vol = np.pi * r * r
         elif d == 3:
-         denom = (4.0/3.0) * np.pi * r**3
+            vol = (4.0/3.0) * np.pi * r**3
         else:
-            denom = r**d
-        rho = counts / denom
+            vol = r**d  # crude fallback
         
+        rho = counts / vol
         densities.append(np.mean(rho))
 
     return float(np.mean(densities))

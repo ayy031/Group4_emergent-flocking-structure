@@ -1,74 +1,45 @@
 import numpy as np
-from typing import Optional
 
 
-def initialize_particles(N: int, box_size: float, rng: np.random.Generator) -> np.ndarray:
-    """
-    Initialize N particles with uniform random positions in [0, box_size) x [0, box_size).
-
-    Parameters
-    ----------
-    N : int
-        Number of particles.
-    box_size : float
-        Side length of the square box.
-    rng : np.random.Generator
-        Random number generator.
-
-    Returns
-    -------
-    np.ndarray, shape (N, 2)
-        Initial positions.
-    """
+def initialize_particles(N, box_size, rng):
+    """Start particles randomly distributed in the box."""
     return rng.random((N, 2)) * box_size
 
 
-def _pairwise_diffs_pbc(positions: np.ndarray, box_size: float) -> tuple[np.ndarray, np.ndarray]:
+def _pairwise_diffs_pbc(positions, box_size):
     """
-    Compute pairwise displacements and distances under minimum-image PBC.
-
-    Note
-    ----
-    diffs[i, j] = x_i - x_j (after applying minimum-image convention).
-    So the vector from i to j is -diffs[i, j].
+    All pairwise distances with periodic BC.
+    Returns displacement vectors and distances.
     """
     diffs = positions[:, None, :] - positions[None, :, :]
-    diffs -= box_size * np.round(diffs / box_size)
+    diffs -= box_size * np.round(diffs / box_size)  # minimum image convention
     dists = np.linalg.norm(diffs, axis=2)
     return diffs, dists
 
 
 def step(
-    positions: np.ndarray,
-    rng: np.random.Generator,
+    positions,
+    rng,
     *,
-    attraction: float = 0.01,
-    repulsion: float = 0.02,
-    noise: float = 0.01,
-    box_size: float = 1.0,
-    dt: float = 1.0,
-    interaction_range: float = 0.6,
-    repulsion_radius: float = 0.05,
-    softening: float = 1e-6,
-) -> np.ndarray:
+    attraction=0.01,
+    repulsion=0.02,
+    noise=0.01,
+    box_size=1.0,
+    dt=1.0,
+    interaction_range=0.6,
+    repulsion_radius=0.05,
+    softening=1e-6,
+):
     """
-    One update step (overdamped dynamics) in a 2D periodic box:
-      x <- x + dt*(attraction*F_att + repulsion*F_rep) + noise*eta
-
-    - F_att: local attraction toward neighbors within interaction_range
-             computed correctly under PBC via minimum-image displacements.
-    - F_rep: short-range repulsion within repulsion_radius.
-        
-    Notes
-    -----
-    - Overdamped dynamics: we directly update positions (no explicit velocities).
-    - Repulsion prevents particles from collapsing into a single point.
-    - Periodic boundaries are enforced by taking positions modulo box_size.
+    Alternative model: overdamped dynamics with attraction/repulsion.
+    
+    Unlike the velocity-based Vicsek model, here we directly update positions
+    based on forces from neighbors. Attraction pulls toward nearby particles,
+    repulsion prevents collapse. No explicit velocities - just positions.
     """
     diffs, dists = _pairwise_diffs_pbc(positions, box_size)
 
-    # --- Attraction: mean vector pointing from i to its neighbors (under PBC) ---
-    # diffs[i,j] = x_i - x_j  => vector from i to j is -diffs[i,j]
+    # Attraction: move toward average position of neighbors
     att_mask = (dists > 0) & (dists < interaction_range)
     counts = att_mask.sum(axis=1)
 
@@ -79,15 +50,13 @@ def step(
 
     F_att = mean_to_neighbors
 
-    # --- Repulsion: push away from close neighbors ---
-    # Repulsion direction points from j to i (diffs = x_i - x_j),
-    # and rep_weight makes the force stronger when closer than repulsion_radius.
+    # Repulsion: push away if too close
     rep_mask = (dists > 0) & (dists < repulsion_radius)
     rep_dir = diffs / (dists[:, :, None] + softening)
     rep_weight = (repulsion_radius - dists)
     F_rep = np.sum(rep_dir * rep_weight[:, :, None] * rep_mask[:, :, None], axis=1)
 
-    # update
+    # Update positions (overdamped: position responds directly to forces)
     positions = positions + dt * (attraction * F_att + repulsion * F_rep)
     positions = positions + noise * rng.normal(size=positions.shape)
     return positions % box_size
@@ -95,27 +64,19 @@ def step(
 
 def run_simulation(
     *,
-    N: int = 200,
-    steps: int = 1000,
-    box_size: float = 1.0,
-    attraction: float = 0.01,
-    repulsion: float = 0.02,
-    noise: float = 0.01,
-    dt: float = 1.0,
-    interaction_range: float = 0.6,
-    repulsion_radius: float = 0.05,
-    seed: Optional[int] = None,
-    save_every: int = 1,
-) -> np.ndarray:
-    """
-    Run the simulation and return saved configurations.
-
-    Returns
-    -------
-    np.ndarray, shape (T, N, 2)
-        Saved trajectory of positions.
-        T = steps // save_every (approximately).
-    """
+    N=200,
+    steps=1000,
+    box_size=1.0,
+    attraction=0.01,
+    repulsion=0.02,
+    noise=0.01,
+    dt=1.0,
+    interaction_range=0.6,
+    repulsion_radius=0.05,
+    seed=None,
+    save_every=1,
+):
+    """Run simulation and return saved trajectory."""
     if save_every < 1:
         raise ValueError("save_every must be >= 1")
 
