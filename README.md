@@ -1,4 +1,4 @@
-Emergence of Flocking Structure from Local Interaction Rules
+#Emergence of Flocking Structure from Local Interaction Rules
 
 This project studies how collective flocking behavior can emerge from very simple local rules.
 
@@ -7,7 +7,7 @@ In nature, birds, fish, and other animals often move together as a group, even t
 To study this, we built a Vicsek-style agent-based model and explored how different parameters affect the transition from random motion to organized flocking.
 
 
-Project Overview
+##Project Overview
 
 In our model, each agent:
 	•	moves at a constant speed
@@ -24,7 +24,7 @@ Even with these simple rules, the system can show:
 We start with a 2D model because it is fast and easy to analyze, and then extend it to 3D to study more realistic flocking behavior.
 
 
-What We Study
+##What We Study
 
 The main questions we explore are:
 	•	Under what conditions does flocking appear?
@@ -34,7 +34,7 @@ The main questions we explore are:
 	•	Do large flocks show consistent geometric structure?
 
 
-  Model Description
+##Model Description
 
 At each time step, every agent:
 	1.	Finds all neighbors within a distance R
@@ -50,7 +50,7 @@ In the 3D version, we also include:
 These additions help stabilize the flock and make the behavior more realistic.
 
 
-Parameters
+##Parameters
 
 The main parameters used in the simulations are:
 	•	noise – how random the motion is
@@ -63,7 +63,7 @@ The main parameters used in the simulations are:
 All simulations use periodic boundary conditions.
 
 
-Measurements
+##Measurements
 
 We use several metrics to analyze the system:
 
@@ -91,7 +91,7 @@ In 3D, we use PCA to measure:
 All measurements are taken after the system reaches a steady state.
 
 
-Main Results
+##Main Results
 	•	Flocking appears only when noise is low.
 	•	Noise is the most important parameter controlling behavior.
 	•	Alignment helps, but only when noise is already small.
@@ -101,7 +101,7 @@ Main Results
 Overall, the system shows a clear phase transition from disorder to order.
 
 
-Summary
+##Summary
 
 This project shows that:
 	•	Complex collective behavior can emerge from very simple rules
@@ -110,3 +110,4 @@ This project shows that:
 	•	3D flocks show more stable structure than 2D ones
 
 The results support the idea that large-scale organization in nature can arise purely from local interactions.
+
