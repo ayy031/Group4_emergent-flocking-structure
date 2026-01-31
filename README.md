@@ -1,35 +1,112 @@
-### Emergent Flocking Structures
+Emergence of Flocking Structure from Local Interaction Rules
 
-You know how birds suddenly form these really organized flocks, or fish schools seem to move together like they're one organism? We wanted to figure out if that kind of collective behavior could emerge just from simple local rules. Like, what if each bird only pays attention to its neighbors, tries to match their direction, but there's some randomness thrown in? Can you get those sudden transitions from chaos to order?
+This project studies how collective flocking behavior can emerge from very simple local rules.
 
-Turns out you can. With just a few basic rules (align with neighbors + random noise), you get phase transitions where the system suddenly switches from complete disorder to organized collective motion. This project is basically mapping out when and why those transitions happen.
+In nature, birds, fish, and other animals often move together as a group, even though each individual only reacts to nearby neighbors. We wanted to see whether this kind of organized motion can appear in a simple simulation where agents follow basic rules like alignment and noise, without any global control.
 
-We built agent-based models where particles interact with their neighbors, then systematically varied alignment strength, noise level, interaction range, and density. Ran hundreds of simulations to find the phase boundaries between disordered and ordered states. The notebooks folder has all the parameter sweeps and phase diagrams.
-
-The main question was: how do alignment, noise, and interaction range work together to determine that phase transition? And once we find the boundaries, are they robust across different random starts, or does everything depend on getting lucky with the initial conditions?
+To study this, we built a Vicsek-style agent-based model and explored how different parameters affect the transition from random motion to organized flocking.
 
 
-**What's in here**
+Project Overview
 
-The src folder has three simulation engines. flocking_sim.py is the basic 2D Vicsek model with velocity-based flocking. We extended it to 3D in flocking_sim_3d.py because we got curious about how things change in higher dimensions. There's also baseline_clustering_2d.py which uses attraction/repulsion forces instead of velocity alignment, just to compare different mechanisms.
+In our model, each agent:
+	•	moves at a constant speed
+	•	looks at nearby neighbors within a certain radius
+	•	tries to align its direction with them
+	•	is affected by random noise
+	•	moves inside a periodic box (wrap-around boundaries)
 
-The metrics.py file has all our measurement functions for cluster sizes, nearest neighbor distances, polarization, etc. The experiments.py framework handles running parameter sweeps across multiple random seeds. We put default parameters in config.py after doing some initial trial runs to find reasonable values.
+Even with these simple rules, the system can show:
+	•	formation of large clusters
+	•	collective motion
+	•	sharp transitions between disorder and order
+
+We start with a 2D model because it is fast and easy to analyze, and then extend it to 3D to study more realistic flocking behavior.
 
 
-**How to use this**
+What We Study
 
-Basic example:
+The main questions we explore are:
+	•	Under what conditions does flocking appear?
+	•	How do noise, alignment strength, and interaction range affect the system?
+	•	Is the transition from disorder to order stable?
+	•	How does flocking change when going from 2D to 3D?
+	•	Do large flocks show consistent geometric structure?
 
-```
-from src.flocking_sim import run_simulation
-from src.metrics import largest_cluster_fraction
 
-history = run_simulation(N=200, steps=500, align=1.0, noise=0.05, R=0.15)
-final_frame = history[-1]
-lcf = largest_cluster_fraction(final_frame, eps=0.06, box_size=1.0)
-print(f"Largest cluster: {lcf*100:.1f}% of particles")
-```
+  Model Description
 
-We track LCF (largest cluster fraction) to see what fraction of particles are in the biggest cluster. High values mean everyone's grouped together. Nearest neighbor distance tells us about local crowding - lower means more clustering. Polarization checks if velocities are aligned, which is the standard order parameter for Vicsek-type models.
+At each time step, every agent:
+	1.	Finds all neighbors within a distance R
+	2.	Computes the average direction of those neighbors
+	3.	Turns toward that direction (alignment)
+	4.	Adds random noise
+	5.	Updates its position while keeping a fixed speed
 
-The main result is there's a pretty clear phase transition. Crank up alignment or reduce noise past certain thresholds and the system suddenly snaps into a flocking state. The exact location depends on interaction range too, which makes intuitive sense since it's harder to coordinate if you can't see your neighbors. Check notebooks/2d_phase_diagram.ipynb for the full analysis and phase diagrams.
+In the 3D version, we also include:
+	•	short-range repulsion (to prevent overlap)
+	•	a weak cohesion term (to keep the group together)
+
+These additions help stabilize the flock and make the behavior more realistic.
+
+
+Parameters
+
+The main parameters used in the simulations are:
+	•	noise – how random the motion is
+	•	align – how strongly agents follow neighbors
+	•	R – interaction radius
+	•	N – number of agents
+	•	dt – time step size
+	•	speed – movement speed
+
+All simulations use periodic boundary conditions.
+
+
+Measurements
+
+We use several metrics to analyze the system:
+
+Largest Cluster Fraction (LCF)
+
+Measures how many agents belong to the largest connected group.
+	•	High LCF → strong flocking
+	•	Low LCF → disordered state
+
+Nearest Neighbor Distance (NN)
+
+Shows how tightly agents are packed.
+
+Polarization
+
+Measures how aligned the velocities are across the system.
+
+3D Shape Measures
+
+In 3D, we use PCA to measure:
+	•	flock thickness
+	•	shape ratios
+	•	volume and density
+
+All measurements are taken after the system reaches a steady state.
+
+
+Main Results
+	•	Flocking appears only when noise is low.
+	•	Noise is the most important parameter controlling behavior.
+	•	Alignment helps, but only when noise is already small.
+	•	In 3D, flocks are more stable but require a larger interaction radius.
+	•	Large flocks show consistent geometric structure as size increases.
+
+Overall, the system shows a clear phase transition from disorder to order.
+
+
+Summary
+
+This project shows that:
+	•	Complex collective behavior can emerge from very simple rules
+	•	No global control is needed for flocking to appear
+	•	Noise plays a key role in destroying or enabling order
+	•	3D flocks show more stable structure than 2D ones
+
+The results support the idea that large-scale organization in nature can arise purely from local interactions.
